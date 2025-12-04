@@ -1,0 +1,8 @@
+{
+  "ServerIp": "192.168.56.1",
+  "ServerPort": 9999,
+  "CaptureIntervalMs": 100,
+  "JpegQuality": 75,
+  "MaxWidth": null,
+  "MaxHeight": null
+}

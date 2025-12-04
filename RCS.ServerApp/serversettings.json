@@ -1,0 +1,7 @@
+{
+    "Port": 9999,
+    "AutoStart": false,
+    "HeartbeatTimeoutSeconds": 15,
+    "MaxClients": 100,
+    "LogDirectory": "Logs"
+}
