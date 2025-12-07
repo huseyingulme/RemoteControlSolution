@@ -20,10 +20,25 @@ public class ControlSender
     /// </summary>
     public async Task SendControlAsync(string clientId, ControlPacket packet)
     {
-        var connection = _listenerService.GetConnection(clientId);
-        if (connection != null && connection.IsConnected)
+        if (string.IsNullOrWhiteSpace(clientId))
+            throw new ArgumentException("ClientId cannot be null or empty", nameof(clientId));
+        
+        if (packet == null)
+            throw new ArgumentNullException(nameof(packet));
+        
+        try
         {
-            await connection.SendControlPacketAsync(packet);
+            var connection = _listenerService.GetConnection(clientId);
+            if (connection != null && connection.IsConnected)
+            {
+                await connection.SendControlPacketAsync(packet);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error if logger available
+            System.Diagnostics.Debug.WriteLine($"Error sending control packet: {ex.Message}");
+            throw;
         }
     }
 

@@ -19,6 +19,7 @@ public class ClientConnection : IDisposable
     private readonly int _heartbeatTimeoutSeconds;
     private Task? _timeoutCheckTask;
     private CancellationTokenSource? _timeoutCts;
+    private readonly object _heartbeatLock = new();
     
     public ClientInfo? ClientInfo { get; set; }
     
@@ -29,9 +30,10 @@ public class ClientConnection : IDisposable
 
     public ClientConnection(TcpClient tcpClient, NetworkStream networkStream, Logger logger)
     {
-        _tcpClient = tcpClient;
-        _networkStream = networkStream;
-        _logger = logger;
+        _tcpClient = tcpClient ?? throw new ArgumentNullException(nameof(tcpClient));
+        _networkStream = networkStream ?? throw new ArgumentNullException(nameof(networkStream));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _heartbeatTimeoutSeconds = 15; // Default timeout
     }
 
     /// <summary>
@@ -138,7 +140,10 @@ public class ClientConnection : IDisposable
                     var packet = PacketSerializer.Deserialize<HeartbeatPacket>(payload);
                     if (packet != null)
                     {
-                        _lastHeartbeat = DateTime.UtcNow;
+                        lock (_heartbeatLock)
+                        {
+                            _lastHeartbeat = DateTime.UtcNow;
+                        }
                         HeartbeatReceived?.Invoke(this, packet);
                     }
                 }
@@ -205,6 +210,12 @@ public class ClientConnection : IDisposable
     /// </summary>
     public async Task SendControlPacketAsync(ControlPacket packet)
     {
+        if (packet == null)
+            throw new ArgumentNullException(nameof(packet));
+        
+        if (!IsConnected || _networkStream == null)
+            return;
+        
         try
         {
             var packetBytes = PacketSerializer.Serialize(packet);
@@ -215,6 +226,8 @@ public class ClientConnection : IDisposable
         catch (Exception ex)
         {
             _logger.Error("Failed to send control packet", ex);
+            // Bağlantı kopmuş olabilir
+            Disconnect();
         }
     }
 
@@ -235,7 +248,17 @@ public class ClientConnection : IDisposable
     }
 
     public bool IsConnected => _tcpClient?.Connected ?? false;
-    public DateTime LastHeartbeat => _lastHeartbeat;
+    
+    public DateTime LastHeartbeat
+    {
+        get
+        {
+            lock (_heartbeatLock)
+            {
+                return _lastHeartbeat;
+            }
+        }
+    }
 
     public void Dispose()
     {

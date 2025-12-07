@@ -117,6 +117,12 @@ public class AgentService : IDisposable
                     }
                     continue;
                 }
+                
+                // Bağlantı kontrolü - hala bağlı mı?
+                if (!_connectionManager.IsConnected)
+                {
+                    continue;
+                }
 
                 var startTime = DateTime.UtcNow;
                 
@@ -139,11 +145,19 @@ public class AgentService : IDisposable
                 await _connectionManager.SendScreenPacketAsync(packet, imageBytes);
                 
                 var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
-                _logger.Debug($"Frame {packet.Sequence} sent ({imageBytes.Length} bytes, {elapsed:F1}ms)");
+                
+                // Debug log sadece belirli aralıklarla (performans için)
+                if (packet.Sequence % 100 == 0)
+                {
+                    _logger.Debug($"Frame {packet.Sequence} sent ({imageBytes.Length} bytes, {elapsed:F1}ms)");
+                }
 
-                // Bir sonraki frame için bekle
+                // Bir sonraki frame için bekle - elapsed time'ı hesaba kat
                 var delay = Math.Max(0, _captureIntervalMs - (int)elapsed);
-                await Task.Delay(delay, cancellationToken);
+                if (delay > 0)
+                {
+                    await Task.Delay(delay, cancellationToken);
+                }
             }
             catch (OperationCanceledException)
             {

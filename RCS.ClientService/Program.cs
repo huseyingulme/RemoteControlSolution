@@ -81,7 +81,30 @@ class Program
                 var config = JsonSerializer.Deserialize<AgentConfig>(json);
                 
                 if (config != null)
+                {
+                    // Validate config
+                    if (string.IsNullOrWhiteSpace(config.ServerIp))
+                    {
+                        _logger?.Warning("ServerIp is empty in config, using default 127.0.0.1");
+                        config.ServerIp = "127.0.0.1";
+                    }
+                    if (config.ServerPort < 1 || config.ServerPort > 65535)
+                    {
+                        _logger?.Warning($"Invalid ServerPort in config: {config.ServerPort}, using default 9999");
+                        config.ServerPort = 9999;
+                    }
+                    if (config.CaptureIntervalMs < 10 || config.CaptureIntervalMs > 10000)
+                    {
+                        _logger?.Warning($"Invalid CaptureIntervalMs in config: {config.CaptureIntervalMs}, using default 100");
+                        config.CaptureIntervalMs = 100;
+                    }
+                    if (config.JpegQuality < 1 || config.JpegQuality > 100)
+                    {
+                        _logger?.Warning($"Invalid JpegQuality in config: {config.JpegQuality}, using default 75");
+                        config.JpegQuality = 75;
+                    }
                     return config;
+                }
             }
             catch (Exception ex)
             {

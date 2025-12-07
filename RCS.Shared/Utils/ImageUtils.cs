@@ -13,13 +13,19 @@ public static class ImageUtils
     /// </summary>
     public static byte[] BitmapToJpeg(Bitmap bitmap, int quality = 75)
     {
+        if (bitmap == null)
+            throw new ArgumentNullException(nameof(bitmap));
+        
+        if (quality < 1 || quality > 100)
+            quality = 75; // Default quality
+        
         using var ms = new MemoryStream();
         
         var encoder = ImageCodecInfo.GetImageEncoders()
             .FirstOrDefault(c => c.FormatID == ImageFormat.Jpeg.Guid)
             ?? throw new InvalidOperationException("JPEG encoder not found");
 
-        var encoderParams = new EncoderParameters(1)
+        using var encoderParams = new EncoderParameters(1)
         {
             Param = { [0] = new EncoderParameter(Encoder.Quality, quality) }
         };
@@ -42,17 +48,25 @@ public static class ImageUtils
     /// </summary>
     public static Bitmap ResizeBitmap(Bitmap original, int maxWidth, int maxHeight)
     {
+        if (original == null)
+            throw new ArgumentNullException(nameof(original));
+        
+        if (maxWidth < 1 || maxHeight < 1)
+            throw new ArgumentException("MaxWidth and MaxHeight must be greater than 0");
+        
         if (original.Width <= maxWidth && original.Height <= maxHeight)
             return new Bitmap(original);
 
         double ratio = Math.Min((double)maxWidth / original.Width, (double)maxHeight / original.Height);
-        int newWidth = (int)(original.Width * ratio);
-        int newHeight = (int)(original.Height * ratio);
+        int newWidth = Math.Max(1, (int)(original.Width * ratio));
+        int newHeight = Math.Max(1, (int)(original.Height * ratio));
 
         var resized = new Bitmap(newWidth, newHeight);
         using (var g = Graphics.FromImage(resized))
         {
             g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+            g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
             g.DrawImage(original, 0, 0, newWidth, newHeight);
         }
 

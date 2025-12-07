@@ -57,11 +57,13 @@ public class ScreenCapturer : IDisposable
     /// </summary>
     public byte[] CaptureScreenAsJpeg(int quality = 75, int? maxWidth = null, int? maxHeight = null)
     {
-        using var bitmap = CaptureScreen();
-        
+        Bitmap? bitmap = null;
         Bitmap? processedBitmap = null;
+        
         try
         {
+            bitmap = CaptureScreen();
+            
             if (maxWidth.HasValue && maxHeight.HasValue)
             {
                 processedBitmap = ImageUtils.ResizeBitmap(bitmap, maxWidth.Value, maxHeight.Value);
@@ -70,9 +72,16 @@ public class ScreenCapturer : IDisposable
             
             return ImageUtils.BitmapToJpeg(bitmap, quality);
         }
+        catch (Exception ex)
+        {
+            // Log error if logger available
+            System.Diagnostics.Debug.WriteLine($"Error capturing screen: {ex.Message}");
+            return Array.Empty<byte>();
+        }
         finally
         {
             processedBitmap?.Dispose();
+            bitmap?.Dispose();
         }
     }
 

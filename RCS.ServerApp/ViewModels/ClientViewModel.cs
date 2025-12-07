@@ -42,8 +42,13 @@ public class ClientViewModel : INotifyPropertyChanged
         get => _thumbnailImage;
         set
         {
+            // Eski thumbnail'i temizle (memory leak önleme)
+            var oldThumbnail = _thumbnailImage;
             _thumbnailImage = value;
             OnPropertyChanged();
+            
+            // Eski image'i dispose et (UI thread'de değil, burada dispose edilemez ama null yapılabilir)
+            // BitmapImage Freeze() edilmiş olduğu için dispose edilemez, GC tarafından temizlenir
         }
     }
 

@@ -19,6 +19,7 @@ public class ConnectionManager : IDisposable
     private bool _disposed = false;
     private CancellationTokenSource? _cancellationTokenSource;
     private Task? _receiveTask;
+    private readonly object _connectionLock = new();
     
     public event EventHandler<ControlPacket>? ControlPacketReceived;
     public event EventHandler<bool>? ConnectionStatusChanged;
@@ -52,7 +53,11 @@ public class ConnectionManager : IDisposable
             await _tcpClient.ConnectAsync(_serverIp, _serverPort);
             
             _networkStream = _tcpClient.GetStream();
-            _isConnected = true;
+            
+            lock (_connectionLock)
+            {
+                _isConnected = true;
+            }
             
             _cancellationTokenSource = new CancellationTokenSource();
             
@@ -73,7 +78,10 @@ public class ConnectionManager : IDisposable
         catch (Exception ex)
         {
             _logger.Error("Failed to connect to server", ex);
-            _isConnected = false;
+            lock (_connectionLock)
+            {
+                _isConnected = false;
+            }
             ConnectionStatusChanged?.Invoke(this, false);
             return false;
         }
@@ -84,7 +92,13 @@ public class ConnectionManager : IDisposable
     /// </summary>
     public void Disconnect()
     {
-        _isConnected = false;
+        lock (_connectionLock)
+        {
+            if (!_isConnected)
+                return;
+            _isConnected = false;
+        }
+        
         _cancellationTokenSource?.Cancel();
         
         try
@@ -173,8 +187,17 @@ public class ConnectionManager : IDisposable
 
         var buffer = new byte[4096];
         
-        while (!cancellationToken.IsCancellationRequested && _isConnected)
+        while (!cancellationToken.IsCancellationRequested)
         {
+            bool isConnected;
+            lock (_connectionLock)
+            {
+                isConnected = _isConnected;
+            }
+            
+            if (!isConnected)
+                break;
+            
             try
             {
                 // Length okuma (4 byte)
@@ -184,7 +207,6 @@ public class ConnectionManager : IDisposable
                 if (bytesRead != 4)
                 {
                     _logger.Warning("Failed to read packet length, disconnecting");
-                    Disconnect();
                     break;
                 }
 
@@ -203,7 +225,7 @@ public class ConnectionManager : IDisposable
                 if (bytesRead != payloadLength)
                 {
                     _logger.Warning($"Failed to read full payload. Expected: {payloadLength}, Read: {bytesRead}");
-                    continue;
+                    break;
                 }
 
                 // Paketi parse et
@@ -223,9 +245,12 @@ public class ConnectionManager : IDisposable
             catch (Exception ex)
             {
                 _logger.Error("Error in receive loop", ex);
-                await Task.Delay(1000, cancellationToken); // Hata durumunda kısa bekleme
+                break; // Hata durumunda döngüden çık
             }
         }
+        
+        // Bağlantı koptu, disconnect et
+        Disconnect();
     }
 
     /// <summary>
@@ -253,13 +278,19 @@ public class ConnectionManager : IDisposable
     /// </summary>
     private async Task HeartbeatLoopAsync(CancellationToken cancellationToken)
     {
-        while (!cancellationToken.IsCancellationRequested && _isConnected)
+        while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
                 await Task.Delay(5000, cancellationToken); // 5 saniye bekle
                 
-                if (!_isConnected || _networkStream == null)
+                bool isConnected;
+                lock (_connectionLock)
+                {
+                    isConnected = _isConnected;
+                }
+                
+                if (!isConnected || _networkStream == null)
                     break;
 
                 var heartbeat = new HeartbeatPacket
@@ -310,7 +341,16 @@ public class ConnectionManager : IDisposable
         return "127.0.0.1";
     }
 
-    public bool IsConnected => _isConnected;
+    public bool IsConnected
+    {
+        get
+        {
+            lock (_connectionLock)
+            {
+                return _isConnected && (_tcpClient?.Connected ?? false);
+            }
+        }
+    }
 
     public void Dispose()
     {

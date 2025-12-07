@@ -15,6 +15,7 @@ namespace RCS.ServerApp.Views;
 public partial class RemoteViewWindow : Window
 {
     private readonly RemoteViewViewModel _viewModel;
+    private readonly ScreenReceiver _screenReceiver;
     private bool _isMouseDown = false;
     private Point _lastMousePosition;
     private bool _isFullscreen = false;
@@ -31,6 +32,7 @@ public partial class RemoteViewWindow : Window
     {
         InitializeComponent();
         
+        _screenReceiver = screenReceiver ?? throw new ArgumentNullException(nameof(screenReceiver));
         _viewModel = new RemoteViewViewModel(client, connection, screenReceiver, controlSender);
         DataContext = _viewModel;
 
@@ -67,15 +69,27 @@ public partial class RemoteViewWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
-            if (data.ImageBytes.Length > 0)
+            try
             {
-                var screenReceiver = new ScreenReceiver();
-                var bitmapImage = screenReceiver.ConvertBytesToBitmapImage(data.ImageBytes);
-                if (bitmapImage != null)
+                if (data.ImageBytes.Length > 0)
                 {
-                    _viewModel.RemoteImage = bitmapImage;
-                    UpdateImageScale();
+                    // Eski image'i dispose et (memory leak önleme)
+                    var oldImage = _viewModel.RemoteImage;
+                    _viewModel.RemoteImage = null;
+                    
+                    // Yeni image oluştur
+                    var bitmapImage = _screenReceiver.ConvertBytesToBitmapImage(data.ImageBytes);
+                    if (bitmapImage != null)
+                    {
+                        _viewModel.RemoteImage = bitmapImage;
+                        UpdateImageScale();
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                // Log error silently - don't crash the UI
+                System.Diagnostics.Debug.WriteLine($"Error processing screen packet: {ex.Message}");
             }
         });
     }

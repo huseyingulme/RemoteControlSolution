@@ -229,27 +229,37 @@ public class MainViewModel : INotifyPropertyChanged
     {
         App.Current.Dispatcher.Invoke(() =>
         {
-            var client = Clients.FirstOrDefault(c => c.ClientId == clientId);
-            if (client == null)
-                return;
-
-            client.LastSeen = DateTime.UtcNow;
-            
-            // Thumbnail oluştur (isteğe bağlı)
-            if (imageBytes.Length > 0)
+            try
             {
-                try
+                var client = Clients.FirstOrDefault(c => c.ClientId == clientId);
+                if (client == null)
+                    return;
+
+                client.LastSeen = DateTime.UtcNow;
+                
+                // Thumbnail oluştur (isteğe bağlı) - sadece belirli aralıklarla güncelle (performans için)
+                // Her 2 saniyede bir thumbnail güncelle (performans optimizasyonu)
+                var timeSinceLastUpdate = DateTime.UtcNow - client.LastSeen;
+                if (imageBytes.Length > 0 && timeSinceLastUpdate.TotalSeconds < 2)
                 {
-                    var thumbnail = _screenReceiver.ConvertBytesToBitmapImage(imageBytes);
-                    if (thumbnail != null)
+                    try
                     {
-                        client.ThumbnailImage = thumbnail;
+                        var thumbnail = _screenReceiver.ConvertBytesToBitmapImage(imageBytes);
+                        if (thumbnail != null)
+                        {
+                            client.ThumbnailImage = thumbnail;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Debug($"Error creating thumbnail: {ex.Message}");
+                        // Ignore thumbnail errors - non-critical
                     }
                 }
-                catch
-                {
-                    // Ignore thumbnail errors
-                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("Error processing screen packet", ex);
             }
         });
     }
@@ -310,11 +320,27 @@ public class MainViewModel : INotifyPropertyChanged
                 var json = File.ReadAllText(ConfigFilePath);
                 var config = JsonSerializer.Deserialize<ServerConfig>(json);
                 if (config != null)
+                {
+                    // Validate config
+                    if (config.Port < 1 || config.Port > 65535)
+                    {
+                        _logger?.Warning($"Invalid port in config: {config.Port}, using default 9999");
+                        config.Port = 9999;
+                    }
+                    if (config.HeartbeatTimeoutSeconds < 5)
+                    {
+                        config.HeartbeatTimeoutSeconds = 15;
+                    }
+                    if (config.MaxClients < 1)
+                    {
+                        config.MaxClients = 100;
+                    }
                     return config;
+                }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Failed to load server config: {ex.Message}");
+                _logger?.Error($"Failed to load server config: {ex.Message}", ex);
             }
         }
 

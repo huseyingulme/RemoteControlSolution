@@ -40,6 +40,9 @@ public class ScreenReceiver
     /// </summary>
     public BitmapImage? ConvertBytesToBitmapImage(byte[] imageBytes)
     {
+        if (imageBytes == null || imageBytes.Length == 0)
+            return null;
+            
         try
         {
             using var ms = new MemoryStream(imageBytes);
@@ -48,12 +51,14 @@ public class ScreenReceiver
             bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
             bitmapImage.StreamSource = ms;
             bitmapImage.EndInit();
-            bitmapImage.Freeze();
+            bitmapImage.Freeze(); // Thread-safe için freeze et
             
             return bitmapImage;
         }
-        catch
+        catch (Exception ex)
         {
+            // Log error if logger available
+            System.Diagnostics.Debug.WriteLine($"Error converting bytes to BitmapImage: {ex.Message}");
             return null;
         }
     }
